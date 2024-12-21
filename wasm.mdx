@@ -151,16 +151,255 @@ wasm-pack build --release
 # pkg/
 # ├── package.json
 # ├── README.md
-# ├── your_project_bg.wasm        # WASM二进制文件
-# ├── your_project.js            # ES6模块包装代码
-# └── your_project.d.ts          # TypeScript类型定义
+# ├── canvas-wasm.wasm        # WASM二进制文件
+# ├── canvas-wasm.js            # ES6模块包装代码
+# └── canvas-wasm.d.ts          # TypeScript类型定义
 ```
 
-| 特性 | --target web | --dev | --release |
-|------|-------------|-------|-----------|
-| 编译速度 | 中等 | 快 | 慢 |
-| 文件大小 | 中等 | 大 | 小 |
-| 运行性能 | 好 | 一般 | 最佳 |
-| 调试信息 | 部分 | 完整 | 无 |
-| 优化级别 | 中等 | 无 | 最高 |
-| 使用场景 | 常规开发 | 开发调试 | 生产部署 |
+### 模式对比
+
+| 特性   | --target web                   | --dev                   | --release                   | 配置方式                   |
+| ---- | ------------------------------ | ----------------------- | --------------------------- | ---------------------- |
+| 构建命令 | `wasm-pack build --target web` | `wasm-pack build --dev` | `wasm-pack build --release` | 直接使用命令                 |
+| 适用场景 | 测试/预发布                         | 本地开发                    | 生产环境                        | 根据环境选择                 |
+| 构建时间 | \~30s                          | \~10s                   | \~60s                       | 可通过 `codegen-units` 调整 |
+| 文件大小 | \~500KB                        | \~1MB                   | \~200KB                     | 通过 `wasm-opt` 优化       |
+| 性能表现 | 85%                            | 60%                     | 100%                        | 可通过 `opt-level` 调整     |
+
+## 前端链接 WASM 指南
+
+### 基础引入方式
+
+```html
+<!-- index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>WASM Canvas Demo</title>
+</head>
+<body>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    <script type="module">
+        import init, { draw_something } from './pkg/canvas_wasm.js';
+
+        async function run() {
+            // 初始化WASM模块
+            await init();
+            
+            // 获取canvas元素
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // 调用WASM函数
+            draw_something(canvas);
+        }
+
+        run();
+    </script>
+</body>
+</html>
+```
+
+### 使用构建工具（推荐）
+
+#### Webpack 配置
+
+```javascript
+// webpack.config.js
+const path = require('path');
+
+module.exports = {
+    entry: './index.js',
+    output: {
+        path: path.resolve(__dirname, 'dist'),
+        filename: 'bundle.js',
+    },
+    experiments: {
+        asyncWebAssembly: true,
+    },
+    module: {
+        rules: [
+            {
+                test: /\.wasm$/,
+                type: "webassembly/async",
+            }
+        ]
+    }
+};
+```
+
+#### Vite 配置
+
+```javascript
+// vite.config.js
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+    server: {
+        fs: {
+            allow: ['..']
+        }
+    },
+    build: {
+        target: 'esnext',
+        outDir: 'dist'
+    }
+})
+```
+
+#### 前端调用例子
+
+```javascript
+// index.js - 基础用法
+import init, { WasmCanvas } from './pkg/canvas_wasm.js';
+
+class CanvasManager {
+    constructor() {
+        this.canvas = null;
+        this.wasmInstance = null;
+    }
+
+    async initialize() {
+        // 初始化WASM
+        await init();
+        
+        // 获取Canvas元素
+        this.canvas = document.getElementById('canvas');
+        
+        // 创建WASM Canvas实例
+        this.wasmInstance = new WasmCanvas(this.canvas);
+        
+        // 设置事件监听
+        this.setupEventListeners();
+    }
+
+    setupEventListeners() {
+        this.canvas.addEventListener('mousedown', (e) => {
+            const rect = this.canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            this.wasmInstance.handle_mouse_down(x, y);
+        });
+    }
+
+    startDrawing() {
+        this.wasmInstance.start_animation();
+    }
+}
+
+// 使用示例
+const manager = new CanvasManager();
+manager.initialize().then(() => {
+    manager.startDrawing();
+});
+```
+
+### 高级用法示例
+
+```javascript
+// 内存管理和性能优化
+import init, { 
+    WasmCanvas, 
+    memory,
+    create_image_data 
+} from './pkg/canvas_wasm.js';
+
+class AdvancedCanvasManager {
+    async initialize() {
+        await init();
+        
+        // 直接操作WASM内存
+        const wasmMemory = memory;
+        
+        // 创建共享内存缓冲区
+        const imageData = create_image_data(800, 600);
+        const buffer = new Uint8ClampedArray(
+            wasmMemory.buffer,
+            imageData.ptr,
+            imageData.len
+        );
+        
+        // 性能优化：使用requestAnimationFrame
+        this.animate = this.animate.bind(this);
+        requestAnimationFrame(this.animate);
+    }
+
+    animate(timestamp) {
+        this.wasmInstance.update(timestamp);
+        requestAnimationFrame(this.animate);
+    }
+
+    // 错误处理
+    async safeWasmCall(fn, ...args) {
+        try {
+            return await fn(...args);
+        } catch (error) {
+            console.error('WASM execution error:', error);
+            // 错误恢复逻辑
+        }
+    }
+}
+```
+
+### TypeScript 支持
+
+```typescript
+// index.ts
+import init, { 
+    WasmCanvas,
+    Point,
+    DrawOptions 
+} from './pkg/canvas_wasm';
+
+interface CanvasConfig {
+    width: number;
+    height: number;
+    backgroundColor: string;
+}
+
+class TypedCanvasManager {
+    private wasmCanvas: WasmCanvas | null = null;
+    private config: CanvasConfig;
+
+    constructor(config: CanvasConfig) {
+        this.config = config;
+    }
+
+    async initialize(): Promise<void> {
+        await init();
+        this.wasmCanvas = new WasmCanvas(
+            this.config.width,
+            this.config.height
+        );
+    }
+
+    drawPoint(point: Point, options: DrawOptions): void {
+        this.wasmCanvas?.drawPoint(point, options);
+    }
+}
+```
+
+### 性能优化建议
+
+```javascript
+// 性能优化实践
+class OptimizedCanvasManager {
+    constructor() {
+        // 使用离屏canvas进行缓存
+        this.offscreenCanvas = new OffscreenCanvas(800, 600);
+        
+        // 使用SharedArrayBuffer进行数据传输
+        this.sharedBuffer = new SharedArrayBuffer(1024 * 1024);
+        
+        // 使用WebWorker进行计算密集型任务
+        this.worker = new Worker('wasm-worker.js');
+    }
+
+    // 批量处理以减少WASM调用次数
+    async batchProcess(commands) {
+        const results = await this.wasmInstance.process_batch(commands);
+        return results;
+    }
+}
+```
