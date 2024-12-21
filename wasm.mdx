@@ -1,0 +1,160 @@
+<Info>
+  **提示**: WASM技术方案支持大部分的浏览器和操作系统，具有较好的通用性，但是不支持IE
+</Info>
+
+## Rust 开发环境配置
+
+```bash
+# 下载并安装rust和cargo
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+cargo install wasm-pack
+
+# 首先加载cargo环境变量
+source "$HOME/.cargo/env"
+
+# 或者将以下行添加到 ~/.bashrc 文件中
+echo 'source "$HOME/.cargo/env"' >> ~/.bashrc
+source ~/.bashrcrustrustcargo
+```
+
+## Rust 后端开发部分
+
+### 项目构建与配置
+
+```bash
+# 创建新项目
+cargo new canvas-wasm --lib
+cd canvas-wasm
+
+# 初始化wasm项目
+wasm-pack init
+```
+
+```markdown
+# canvas-wasm 项目结构
+project/
+├── src/
+│   └── lib.rs
+├── Cargo.lock
+└── Cargo.toml
+```
+
+### 项目配置文件
+
+```bash
+# 包配置部分
+[package]
+name = "canvas-wasm"              # 项目名称，用于发布和引用
+version = "0.1.0"                 # 项目版本号，遵循语义化版本
+edition = "2021"                  # Rust版本，推荐使用2021版本
+authors = ["Your Name "]          # 作者信息
+description = "A WebAssembly"     # 项目描述
+
+# 指定编译目标为cdylib（动态库），用于生成WebAssembly模块
+[lib]
+crate-type = ["cdylib"]          # 编译为.wasm文件
+name = "canvas_wasm"             # 生成的库名称
+path = "src/lib.rs"              # 入口文件路径
+
+# 主要依赖配置
+[dependencies]
+# WebAssembly核心依赖
+wasm-bindgen = "0.2"             # WASM绑定，用于Rust和JavaScript交互
+js-sys = "0.3"                   # JavaScript标准库的Rust绑定
+wasm-bindgen-futures = "0.4"     # 异步操作支持
+
+# Web API访问
+web-sys = { version = "0.3", features = [
+    # DOM操作相关
+    "Window",
+    "Document",
+    "Element",
+    "Node",
+    "HtmlElement",
+    
+    # Canvas相关
+    "HtmlCanvasElement",
+    "CanvasRenderingContext2d",
+    "Path2d",
+    "ImageData",
+]}
+
+# 序列化支持
+serde = { version = "1.0", features = ["derive"] } 
+serde_json = "1.0"               
+
+# 内存分配器（可选，用于优化WASM内存使用）
+wee_alloc = { version = "0.4", optional = true } 
+
+# 错误处理
+console_error_panic_hook = "0.1" 
+
+# 可选功能依赖
+getrandom = { version = "0.2", features = ["js"] }  # 随机数生成，支持WASM
+chrono = { version = "0.4", features = ["wasmbind"] }  # 时间处理，支持WASM
+
+# 开发依赖，仅在开发和测试时使用
+[dev-dependencies]
+wasm-bindgen-test = "0.3"        # WASM测试框架
+futures = "0.3"                  # 异步编程支持
+console_log = "1.0"              # 开发时的日志输出
+wasm-timer = "0.2"               # 定时器支持
+
+# 特性配置
+[features]
+default = ["console_error_panic_hook"]  # 默认开启的特性
+wee_alloc = ["dep:wee_alloc"]           # 可选的内存分配器
+debug = ["console_log"]                 # 调试模式
+
+# 性能优化配置
+[profile.release]
+opt-level = 3                    # 最高优化级别
+lto = true                       # 启用链接时优化
+codegen-units = 1                # 减少并行编译单元以提高优化效果
+panic = "abort"                  # panic时直接终止，减少代码体积
+strip = true                     # 移除调试符号
+
+# wasm-opt 优化配置
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['-O4']              # wasm-opt优化级别
+
+# 发布配置
+[package.metadata.wasm-pack.profile.release.wasm-bindgen]
+debug-js-glue = false          # 关闭JS胶水代码的调试信息
+demangle-name-section = true   # 优化名称段
+dwarf-debug-info = false      # 移除DWARF调试信息
+
+# 排除不需要的文件，减少包体积
+[package]
+exclude = [
+    "tests/*"
+]
+```
+
+### 项目编译分发
+
+```bash
+# 使用wasm-pack构建
+wasm-pack build --target web
+
+# 开发模式构建
+wasm-pack build --dev
+
+# 生产模式构建
+wasm-pack build --release
+
+# pkg/
+# ├── package.json
+# ├── README.md
+# ├── your_project_bg.wasm        # WASM二进制文件
+# ├── your_project.js            # ES6模块包装代码
+# └── your_project.d.ts          # TypeScript类型定义
+```
+| 特性 | --target web | --dev | --release | 额外配置选项 | 相关命令/工具 |
+|------|-------------|-------|-----------|--------------|---------------|
+| 编译速度 | 中等 | 快 | 慢 | `codegen-units = N` | `cargo clean && wasm-pack build` |
+| 文件大小 | 中等 | 大 | 小 | `[profile.release] strip = true` | `wasm-opt -Os` |
+| 运行性能 | 好 | 一般 | 最佳 | `lto = true` | `wasm-opt -O4` |
+| 调试信息 | 部分 | 完整 | 无 | `debug = true/false` | `wasm-pack build --dev -- --features "console_error_panic_hook"` |
+| 优化级别 | 中等 | 无 | 最高 | `opt-level = 0-3` | `RUSTFLAGS="-C target-cpu=native"` |
+| 使用场景 | 常规开发 | 开发调试 | 生产部署 | - | - |
