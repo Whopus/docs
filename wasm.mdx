@@ -1,3 +1,8 @@
+---
+title: "Rust WebAssembly Canvas"
+description: "该技术方案提供了一个完整的 Rust WASM Canvas 实现框架。它包含了基础功能实现、性能优化、错误处理等关键部分。"
+---
+
 <Info>
   **提示**: WASM技术方案支持大部分的浏览器和操作系统，具有较好的通用性，但是不支持IE
 </Info>
@@ -150,11 +155,12 @@ wasm-pack build --release
 # ├── your_project.js            # ES6模块包装代码
 # └── your_project.d.ts          # TypeScript类型定义
 ```
-| 特性 | --target web | --dev | --release | 额外配置选项 | 相关命令/工具 |
-|------|-------------|-------|-----------|--------------|---------------|
-| 编译速度 | 中等 | 快 | 慢 | `codegen-units = N` | `cargo clean && wasm-pack build` |
-| 文件大小 | 中等 | 大 | 小 | `[profile.release] strip = true` | `wasm-opt -Os` |
-| 运行性能 | 好 | 一般 | 最佳 | `lto = true` | `wasm-opt -O4` |
-| 调试信息 | 部分 | 完整 | 无 | `debug = true/false` | `wasm-pack build --dev -- --features "console_error_panic_hook"` |
-| 优化级别 | 中等 | 无 | 最高 | `opt-level = 0-3` | `RUSTFLAGS="-C target-cpu=native"` |
-| 使用场景 | 常规开发 | 开发调试 | 生产部署 | - | - |
+
+| 特性 | --target web | --dev | --release |
+|------|-------------|-------|-----------|
+| 编译速度 | 中等 | 快 | 慢 |
+| 文件大小 | 中等 | 大 | 小 |
+| 运行性能 | 好 | 一般 | 最佳 |
+| 调试信息 | 部分 | 完整 | 无 |
+| 优化级别 | 中等 | 无 | 最高 |
+| 使用场景 | 常规开发 | 开发调试 | 生产部署 |
